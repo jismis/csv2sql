@@ -10,24 +10,19 @@ n=1
 #     for row in df.itertuples():
 #         print(row)
 
+df.columns = df.columns.str.replace(r'\s+', '_', regex=True)
+df.columns = df.columns.str.replace(r'\(', '_', regex=True)
+df.columns = df.columns.str.replace(r'\)', '_', regex=True)
+df.columns = df.columns.str.replace(r'\.', '', regex=True)
+
 sample_data = next(df.itertuples())
+print(list(df.columns))
+print('NPI' in list(df.columns))
 
-fieldnames_query_entry = []
-questionMarks = []
-values = []
+# for col, val in zip(df.columns, sample_data[1:]):
+#     print(f"{col}: {val}")
 
-for field in record.keys():
-    entry = f'''{field}'''
-    questionMarks.append("?")
-    fieldnames_query_entry.append(entry)
-    values.append(record[field])
 
-valueQuestionMarks = ', '.join(questionMarks)
-fieldnames_string = ', '.join(fieldnames_query_entry)
-
-query = f'''INSERT INTO {table_name} ({fieldnames_string}) VALUES ({valueQuestionMarks})'''
-
-self.execute_query(query, values)
 
 
 
