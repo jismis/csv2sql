@@ -70,7 +70,7 @@ class sqlTable:
     
         query = f'''INSERT INTO {table_name} ({fieldnames_string}) VALUES ({valueQuestionMarks})'''
         
-        print(query)
+        #print(query)
 
         self.execute_query(query, values)
     
@@ -117,12 +117,13 @@ class TableFactory:
             query = f'''ALTER TABLE {table_name} ADD COLUMN {sql_column_name} {value_type}'''
             table.execute_query(query)
     
-    def make_table(self, table_name, parent_table=None):
+    def make_table(self, table_name, parent_table=""):
+
         if parent_table:
-            query = f'''CREATE TABLE IF NOT EXISTS {table_name} (_id INTEGER PRIMARY KEY AUTOINCREMENT, parent_id INTEGER NOT NULL, 
-            FOREIGN KEY (parent_id) REFERENCES {parent_table.name()}(_id))'''
+            query = f'''CREATE TABLE IF NOT EXISTS {table_name} (_id INTEGER PRIMARY KEY AUTOINCREMENT, NPI INTEGER NOT NULL, 
+            FOREIGN KEY (NPI) REFERENCES {parent_table}(NPI))'''
         else:
-            query = f'''CREATE TABLE IF NOT EXISTS {table_name} (_id INTEGER PRIMARY KEY AUTOINCREMENT)'''
+            query = f'''CREATE TABLE IF NOT EXISTS {table_name} (NPI INTEGER PRIMARY KEY)'''
 
         table = sqlTable(table_name, parent_table)
         table.execute_query(query)

@@ -23,7 +23,7 @@ class manageFile:
 
         self.table_factory = table_factory
 
-        self.col_names = []
+        self.col_names = {}
 
     def removeSpecCharFromCol(self):
 
@@ -36,9 +36,9 @@ class manageFile:
         self.df.columns = self.df.columns.str.replace(r'\.', '', regex=True)
         # add something here to say if there is a row that is not the name it needs to be then print the df.columns name and exit sys
     
-    def makeTable(self, table_name):
+    def makeTable(self, table_name, parent_table=""):
 
-        return self.table_factory.make_table(table_name)
+        return self.table_factory.make_table(table_name, parent_table)
     
     def getColumnDictionary(self):
 
@@ -60,39 +60,43 @@ class manageFile:
 
             self.commit(table)
 
+
     def publishRow(self, table, record):
 
         self.table_factory.update_record(table, record)
     
+
     def parseRow(self, table, row):
 
         column_dictionary = self.getColumnDictionary()
 
         row_values = {}
 
-        for colName in column_dictionary:
+        for old_field, new_field in column_dictionary.items():
 
-            value = getattr(row, colName)
+            value = getattr(row, old_field)
 
             if self.isNaN(value):
 
                 continue
 
-            if not self.table_factory.doesColumnExist(table, colName):
+            if not self.table_factory.doesColumnExist(table, new_field):
 
                 #print("Column Does Not Exist")
 
-                self.table_factory.make_column(table, colName, value)
+                self.table_factory.make_column(table, new_field, value)
 
                 self.commit(table)
 
-                row_values[colName] = value
+                row_values[new_field] = value
+            
+            #if column exists and already has a value, make a new entry? 
 
             else: 
 
                 #print("Column Does Exist")
 
-                row_values[colName] = value
+                row_values[new_field] = value
 
         return row_values
     
@@ -145,6 +149,20 @@ class manageFile:
 
             sys.exit()
 
+#need to check that the length replacement column names matches that of original names 
+    def checkArrayLength(self, original_array, new_array):
+        
+        if len(original_array) == len(new_array):
+
+            return True
+        
+        else: 
+
+            print(f"Original ({len(original_array)}) and New Names({len(new_array)}) Array Lengths Do Not Match")
+
+            sys.exit()
+
+
     def checkColNames(self, *args):
 
         #call df.columns to fix all col names here 
@@ -163,11 +181,13 @@ class manageFile:
 
             #if names pass tests, then can set col_names to df.columns
 
-            self.col_names = list(self.df.columns)
+            for name in list(self.df.columns):
+
+                self.col_names[name] = name
 
         #if column names are known and certain columns want to be made to make a specific table
 
-        if len(args)==1:
+        if len(args) == 1:
             
             self.checkdfColNames(sample_data)
 
@@ -175,23 +195,77 @@ class manageFile:
 
             #if names pass tests, then can set col_names to user entered col_names
 
-            self.col_names = args[0]
+            for name in args[0]:
+                
+                self.col_names[name] = name
+
+        if len(args) == 2: 
+
+            self.checkdfColNames(sample_data)
+
+            self.checkUserColNames(list(self.df.columns), args[0])
+
+            original_array = args[0]
+
+            new_array = args[1]
+
+            self.checkArrayLength(original_array, new_array)
+
+            for i in range(len(original_array)):
+
+                self.col_names[original_array[i]] = new_array[i]
+
 
         #for now, columns entered must be part of an array
-        if len(args)>1:
+        if len(args)>2:
 
             print("Too many arguments entered")
 
             sys.exit()
         
         return True
+    
 
+    def replaceColName(self, original, new):
 
+        dict = {}
 
+        dict[original] = new
+
+        return dict
+
+#table 1 ("NPI_Base_Table"): ["NPI", "Entity_Type_Code", "Replacement_NPI", "Employer_Identification_Number__EIN_"]
+#table 2: ["NPI", "Provider_Organization_Name__Legal_Business_Name_", "Provider_Last_Name__Legal_Name_", 
+                   #"Provider_First_Name", "Provider_Middle_Name", "Provider_Name_Prefix_Text", "Provider_Name_Suffix_Text", 
+                   #"Provider_Credential_Text", "Provider_Other_Organization_Name", "Provider_Other_Organization_Name_Type_Code",
+                   #"Provider_Other_Last_Name", "Provider_Other_First_Name", "Provider_Other_Middle_Name", 
+                  # "Provider_Other_Name_Prefix_Text", "Provider_Other_Name_Suffix_Text", "Provider_Other_Credential_Text",
+                   #"Provider_Other_Last_Name_Type_Code"]
+
+            #table 2: want to add type legal and type other       
+
+              
 if __name__ == "__main__":
     #file = sys.stderr
     #print(file)
     File = manageFile("extract3.csv")
-    table = File.makeTable("testNPIRow")
-    File.checkColNames(["NPI"])
+    table = File.makeTable("NPI_Organization_and_Provider_Information")
+    old_columns = ["NPI", "Provider_Organization_Name__Legal_Business_Name_", "Provider_Last_Name__Legal_Name_", 
+                   "Provider_First_Name", "Provider_Middle_Name", "Provider_Name_Prefix_Text", "Provider_Name_Suffix_Text", 
+                   "Provider_Credential_Text", "Provider_Other_Organization_Name", "Provider_Other_Organization_Name_Type_Code",
+                   "Provider_Other_Last_Name", "Provider_Other_First_Name", "Provider_Other_Middle_Name", 
+                   "Provider_Other_Name_Prefix_Text", "Provider_Other_Name_Suffix_Text", "Provider_Other_Credential_Text",
+                   "Provider_Other_Last_Name_Type_Code"]
+    new_columns = ["NPI", "Provider_Organization_Name", "Provider_Last_Name", 
+                   "Provider_First_Name", "Provider_Middle_Name", "Provider_Name_Prefix_Text", "Provider_Name_Suffix_Text", 
+                   "Provider_Credential_Text", "Provider_Organization_Name", "Provider_Other_Organization_Name_Type_Code", 
+                   "Provider_Last_Name", "Provider_First_Name", "Provider_Middle_Name", "Provider_Name_Prefix_Text", 
+                   "Provider_Name_Suffix_Text", "Provider_Credential_Text", "Provider_Other_Last_Name_Type_Code"]
+    
+    
+    File.checkColNames(old_columns, new_columns)
+    
+
+
     File.parseRows(table)
+
