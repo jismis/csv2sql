@@ -1,5 +1,5 @@
 import sqlite3
-
+import sys
 
 class LimitExceeded: 
     pass
@@ -53,26 +53,133 @@ class sqlTable:
         name = name.replace(".", "")
         return name
     
+
+    def id_exists(self, table_name, record_id, primary_key_name):
+
+        # Use standard parameterized query (?) to prevent SQL injection
+        query = f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE {primary_key_name} = ?)"
+
+        self.cur.execute(query, (record_id,))
+
+        # fetchone() returns a tuple like (1,) if found, or (0,) if not found
+        result = self.cur.fetchone()[0]
+
+        return bool(result)
+    
+    # record is a dictionary, primary_exists boolean
+    def createQuery(self, record, primary_exists, primary_name):
+        fieldnames_query_entry = []
+        questionMarks = []
+        values = []
+        primary_key = 0
+        if primary_exists: 
+            for field in record.keys():
+
+                if field != primary_name:
+                    entry = f'''{self.getSqlColName(field)}'''
+                    questionMarks.append("?")
+                    fieldnames_query_entry.append(entry)
+                    values.append(record[field])
+                else: 
+                    primary_key_name = f'''{self.getSqlColName(field)}'''
+                    primary_key = record[field]
+            
+            values.append(primary_key)
+            return (fieldnames_query_entry, questionMarks, values)
+        
+        else:
+
+            for field in record.keys():
+                entry = f'''{self.getSqlColName(field)}'''
+                questionMarks.append("?")
+                fieldnames_query_entry.append(entry)
+                values.append(record[field])
+            
+            #print(values)
+            return (fieldnames_query_entry, questionMarks, values)
+
+#updates record
     def updateRecord(self, table_name, record):
         fieldnames_query_entry = []
         questionMarks = []
         values = []
-
-        for field in record.keys():
-
-            entry = f'''{self.getSqlColName(field)}'''
-            questionMarks.append("?")
-            fieldnames_query_entry.append(entry)
-            values.append(record[field])
-
-        valueQuestionMarks = ', '.join(questionMarks)
-        fieldnames_string = ', '.join(fieldnames_query_entry)
     
-        query = f'''INSERT INTO {table_name} ({fieldnames_string}) VALUES ({valueQuestionMarks})'''
-        
-        #print(query)
+        #if _id exists as field in record then consider it primary key
 
-        self.execute_query(query, values)
+        if "_id" in record:
+        #if entry for primary exists, do this
+            if self.id_exists(table_name, record["_id"], "_id"):
+                queryTuple = self.createQuery(record, True, "_id")
+                fieldnames_query_entry = queryTuple[0]
+                questionMarks = queryTuple[1]
+                values = queryTuple[2]
+
+                for i in range(len(fieldnames_query_entry)):
+                    fieldnames_query_entry[i] = fieldnames_query_entry[i] + ' = ?'
+
+                fieldnames_string = ', '.join(fieldnames_query_entry) 
+
+                query = f''' UPDATE {table_name} SET {fieldnames_string} WHERE _id = ?'''
+            
+            else: 
+                queryTuple = self.createQuery(record, False, "_id")
+                fieldnames_query_entry = queryTuple[0]
+                questionMarks = queryTuple[1]
+                values = queryTuple[2]
+
+                valueQuestionMarks = ', '.join(questionMarks)
+                fieldnames_string = ', '.join(fieldnames_query_entry)
+    
+                query = f'''INSERT INTO {table_name} ({fieldnames_string}) VALUES ({valueQuestionMarks})'''
+        
+            print(query)
+            print(values)
+
+            self.execute_query(query, values)
+            
+            return True
+
+        #if _id does not exist then consider NPI primary key
+        if "NPI" in record:
+            #if entry for primary exists, do this
+            if self.id_exists(table_name, record["NPI"], "NPI"):
+                #update record
+                queryTuple = self.createQuery(record, True, "NPI")
+                fieldnames_query_entry = queryTuple[0]
+                questionMarks = queryTuple[1]
+                values = queryTuple[2]
+
+                for i in range(len(fieldnames_query_entry)):
+                    fieldnames_query_entry[i] = fieldnames_query_entry[i] + ' = ?'
+    
+                fieldnames_string = ', '.join(fieldnames_query_entry) 
+
+                query = f''' UPDATE {table_name} SET {fieldnames_string} WHERE NPI = ?'''
+            
+            #if not do this
+
+            else: 
+
+                queryTuple = self.createQuery(record, False, "NPI")
+                fieldnames_query_entry = queryTuple[0]
+                questionMarks = queryTuple[1]
+                values = queryTuple[2]
+
+                valueQuestionMarks = ', '.join(questionMarks)
+                fieldnames_string = ', '.join(fieldnames_query_entry)
+    
+                query = f'''INSERT INTO {table_name} ({fieldnames_string}) VALUES ({valueQuestionMarks})'''
+
+            print(query)
+            print(values)
+            self.execute_query(query, values)
+            
+            return True
+
+        print("Something wrong here")
+
+        return False
+
     
     def commit(self):
         if self.con:
@@ -81,6 +188,12 @@ class sqlTable:
         return False
 
 class TableFactory:
+
+    def __init__(self):
+        self.tableList = {}
+    
+    def getTableList(self):
+        return self.tableList
     
     def value_type(self, field_value):
         if (type(field_value)==int):
@@ -94,46 +207,62 @@ class TableFactory:
             return "TEXT"
         return "?"
     
-    def doesColumnExist(self, table, current_column):
-        table_name = table.getName()
+    def getTable(self, table_name):
+        table = self.tableList.get(table_name)
+
+        if table is None:
+            print(f"Warning: Table '{table_name}' not found in tableList!")
+            sys.exit()
+        
+        return table
+    
+    def doesColumnExist(self, table_name, current_column):
+        table = self.getTable(table_name)
         current_column = table.getSqlColName(current_column)
         column_names = table.doesColumnExist(table_name)
         if current_column not in column_names:
-            print(current_column)
+            #print(current_column)
             return False #return false to say that the column was not originally in the list
         return True #return true to say that column was originally in the list
     
-    def make_column(self, table, current_column, field_value):
-        #table = self.get_table(path)
-        table_name = table.getName()
+    def make_column(self, table_name, current_column, field_value):
+
+        table = self.getTable(table_name)
+
         sql_column_name = current_column.replace(" ", "_")
         sql_column_name = sql_column_name.replace("(", "_")
         sql_column_name = sql_column_name.replace(")", "_")
         sql_column_name = sql_column_name.replace(".", "")
         #column appended to table list and column created
-        if not self.doesColumnExist(table, sql_column_name):
+        if not self.doesColumnExist(table_name, sql_column_name):
             print(f"TABLE {table_name}  column  {sql_column_name}")
             value_type = self.value_type(field_value)
+            print(value_type)
             query = f'''ALTER TABLE {table_name} ADD COLUMN {sql_column_name} {value_type}'''
             table.execute_query(query)
     
     def make_table(self, table_name, parent_table=""):
 
         if parent_table:
-            query = f'''CREATE TABLE IF NOT EXISTS {table_name} (_id INTEGER PRIMARY KEY AUTOINCREMENT, NPI INTEGER NOT NULL, 
+            query = f'''CREATE TABLE IF NOT EXISTS {table_name} (_id TEXT PRIMARY KEY, NPI INTEGER NOT NULL, 
             FOREIGN KEY (NPI) REFERENCES {parent_table}(NPI))'''
         else:
             query = f'''CREATE TABLE IF NOT EXISTS {table_name} (NPI INTEGER PRIMARY KEY)'''
 
         table = sqlTable(table_name, parent_table)
+
+        self.tableList[table_name] = table
+
         table.execute_query(query)
 
         return table
     
-    def update_record(self, table, record):
-        table.updateRecord(table.getName(), record)
+    def update_record(self, table_name, record):
+        table = self.getTable(table_name)
+        table.updateRecord(table_name, record)
 
-    def commit(self, table):
+    def commit(self, table_name):
+        table = self.getTable(table_name)
         return table.commit()
     
 
