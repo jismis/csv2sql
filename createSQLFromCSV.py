@@ -8,6 +8,7 @@ import re
 
 
 from csvSchema import TableFactory 
+from npiCSV import npiFileHelper
 
 #opens csv, goes through each record, only adds column if there is a value recorded in the record
 #need to check if we need an extra table to store certain repeating values to avoid adding a ton of columns
@@ -19,11 +20,20 @@ from csvSchema import TableFactory
 
 class manageFile:
 
-    def __init__(self, file_name, table_factory = TableFactory()):
+    def __init__(self, file_name, code, table_factory = TableFactory()):
         self.df = pd.read_csv(file_name)
         self.table_factory = table_factory
         self.col_dictionary = {}
+        self.code = code
+        self.id_ = 0
 
+    def getId(self):
+        return self.id_
+
+    def incrementId(self):
+        self.id_ = self.id_ + 1
+        return self.id_
+    
     def removeSpecCharFromCol(self):
         self.df.columns = self.df.columns.str.replace(r'\s+', '_', regex=True)
         self.df.columns = self.df.columns.str.replace(r'\(', '_', regex=True)
@@ -42,80 +52,101 @@ class manageFile:
     
     def parseRows(self):
         for row in self.df.itertuples():
-            record = self.parseRow(row)
-            self.publishRow(record, "NPI")
+            record = self.parseRow(row, self.code)
+            self.publishRow(record, self.code)
             # want to add something here that says publish every x amount of rows
             for key in self.table_factory.getTableList():
-                print(key)
                 self.commit(key)
 
     def publishRow(self, record, code):
+        if code == "TAX":
+            self.publishRowTax(record)
         if code == "NPI":
-            table = self.publishRowNPI(record)
+            self.publishRowNPI(record)
         
-        return table 
-
-    def publishRowHelper(self, table, record):
-        self.table_factory.update_record(table, record)
     
 # record is array of tuples 
 # returns table it was published in 
     def publishRowNPI(self, record):
         #NPI is type array
         NPI = record["NPI"][0]
+        npi = npiFileHelper()
         
         for field, entry in record.items(): 
             updatedRecord = {}
-            print(field)
             if field == "NPI": 
                 continue
-            if field == "Healthcare_Provider_Taxonomy_Code" or field == "Provider_License_Number" or field == "Provider_License_Number_State_Code" or field == "Healthcare_Provider_Primary_Taxonomy_Switch":
-                for item in entry:
-                    updatedRecord[field] = item[0]
-                    updatedRecord["_id"] = str(NPI[0]) + "." + str(item[1])
-                    updatedRecord["NPI"] = NPI[0]
-                    self.publishRowHelper("Taxonomy_and_License_Information", updatedRecord)
-                continue
-                    
-            if field == "Other_Provider_Identifier_Issuer":
-                for item in entry:
-                    updatedRecord[field] = item[0]
-                    updatedRecord["_id"] = str(NPI[0]) + "." + str(item[1])
-                    updatedRecord["NPI"] = NPI[0]
-                    self.publishRowHelper("Other_Provider_Identifier_Issuer", updatedRecord)
-                continue
 
-            if field == "Healthcare_Provider_Taxonomy_Group":
-                for item in entry: 
-                    updatedRecord[field] = item[0]
-                    updatedRecord["_id"] = str(NPI[0]) + "." + str(item[1])
-                    updatedRecord["NPI"] = NPI[0]
-                    self.publishRowHelper("Healthcare_Provider_Taxonomy_Group", updatedRecord)
-                continue
+            #IS THE ISSUE UPDATEDRECORD?
+            updatedRecordList = npi.publishRowNPI(NPI, field, entry, updatedRecord)
+            #print(f''' field {field} and entry {entry}''')
+            #print(f'''updatedRecordList {updatedRecordList}''')
 
+            for item in updatedRecordList:
+                table_name = item[0]
+                updated_record = item[1]
 
+                if table_name == "Error":
+                    print("There is an issue with the NPI table/column names")
+                    break
+
+                self.publishRowHelper(table_name, updated_record)
+
+    def publishRowTax(self, record):
+        rowID = record['_id'][0][0]
+        for field, entry in record.items():
+            print(f'''field {field}, entry {entry}''')
+            updated_record = {}
             for item in entry:
-                updatedRecord[field] = item[0]
-                updatedRecord["NPI"] = NPI[0]
-                self.publishRowHelper("NPI_Table", updatedRecord)
+                updated_record['_id'] = rowID
+                updated_record[field] = item[0]
+
+                self.publishRowHelper("Taxonomy_Codes", updated_record)
+            ##### NEED TO FINISH THIS 
+
+
+    def publishRowHelper(self, table, record):
+        self.table_factory.update_record(table, record)
                     
 
 # To get table from NPI table. Need to perhaps create a class NPI just to deal with the specific NPI case
-    def getTable(self, field):
-        if field == "Healthcare_Provider_Taxonomy_Code" or field == "Provider_License_Number" or field == "Provider_License_Number_State_Code" or field == "Healthcare_Provider_Primary_Taxonomy_Switch":
-            return "Taxonomy_and_License_Information"
 
-        if field == "Other_Provider_Identifier_Issuer":
-            return "Other_Provider_Identifier_Issuer"
-  
-        if field == "Healthcare_Provider_Taxonomy_Group":
-            return "Healthcare_Provider_Taxonomy_Group"
-        
-        return "NPI_Table"
 
-    def parseRow(self, row):
+    def parseRow(self, row, code):
+        # if code == "":
+        #     return self.parseRowNoCode(row)
+        if code == "TAX":
+            return self.parseRowTax(row)
+        if code == "NPI":
+            return self.parseRowNPI(row)
+
+    def parseRowTax(self, row):
         col_dictionary = self.getColumnDictionary()
         row_values = defaultdict(list)
+        row_values["_id"].append((self.getId(), None))
+        self.incrementId()
+        for old_field, new_field in col_dictionary.items():
+            value = getattr(row, old_field)
+            print(f'''field is {new_field} and value is {value}''')
+            if self.isNaN(value):
+                continue
+
+            table = "Taxonomy_Codes"
+
+            if not self.table_factory.doesColumnExist(table, new_field[0]):
+                self.table_factory.make_column(table, new_field[0], value)
+                self.commit(table)
+                row_values[new_field[0]].append((value, new_field[1]))
+
+            else:
+                row_values[new_field[0]].append((value, new_field[1]))
+
+        return row_values
+
+    def parseRowNPI(self, row):
+        col_dictionary = self.getColumnDictionary()
+        row_values = defaultdict(list)
+        npi = npiFileHelper()
         #new_field is [field name, integer]
         for old_field, new_field in col_dictionary.items():
             value = getattr(row, old_field)
@@ -123,7 +154,11 @@ class manageFile:
             if self.isNaN(value):
                 continue
             
-            table = self.getTable(new_field[0])
+            table = npi.getTable(new_field[0])
+
+            if table == "Error":
+                print("Error in columns for NPI file")
+                break
 
             #print(new_field)
 
@@ -139,6 +174,7 @@ class manageFile:
                 row_values[new_field[0]].append((value, new_field[1]))
 
         return row_values
+
     
     def isNaN(self, value):
         isNan = False
@@ -175,7 +211,7 @@ class manageFile:
                 end = True
         
         if end:
-            print(database_col)
+            print(f'''database_col {database_col}''')
             sys.exit()
 
 #need to check that the length replacement column names matches that of original names 
@@ -207,47 +243,11 @@ class manageFile:
         return field, None
     
 
-    def checkColNames(self, *args):
+    def checkColNames(self, *args): 
         #call df.columns to fix all col names here         
         self.removeSpecCharFromCol()
 
         self.col_dictionary
-
-        # if len(args)==0:
-        #     self.checkdfColNames(sample_data)
-
-        #     #if names pass tests, then can set col_dictionary to df.columns
-
-        #     for name in list(self.df.columns):
-        #         self.col_dictionary[name] = name
-
-        # #if column names are known and certain columns want to be made to make a specific table
-
-        # if len(args) == 1: 
-        #     self.checkdfColNames(sample_data)
-        #     self.checkUserColNames(list(self.df.columns), args[0])
-
-        #     #if names pass tests, then can set col_dictionary to user entered col_dictionary
-
-        #     for name in args[0]:
-        #         newName, integer = self.makeNPIColNames(name)
-        #         self.col_dictionary[name] = [newName, integer]
-
-        # if len(args) == 2: 
-        #     self.checkdfColNames(sample_data)
-        #     self.checkUserColNames(list(self.df.columns), args[0])
-        #     original_array = args[0]
-        #     new_array = args[1]
-        #     self.checkArrayLength(original_array, new_array)
-
-        #     for i in range(len(original_array)):
-        #         self.col_dictionary[original_array[i]] = new_array[i]
-
-
-        # #for now, columns entered must be part of an array
-        # if len(args)>1:
-        #     print("Too many arguments entered")
-        #     sys.exit()
 
         return True
     
@@ -271,13 +271,18 @@ class manageFile:
 if __name__ == "__main__":
     #file = sys.stderr
     #print(file)
-    File = manageFile("extract3.csv")
-    File.makeTable("NPI_Table", "NPI")
-    File.makeTable("Taxonomy_and_License_Information", "NPI")
-    File.makeTable("Other_Provider_Identifier_Issuer", "NPI")
-    File.makeTable("Healthcare_Provider_Taxonomy_Group", "NPI")
-
-
+    File = manageFile("nucc_taxonomy_261.csv", "TAX")
+    #File.makeTable("NPI_Table", "NPI")
+    #File.makeTable("Taxonomy_and_License_Information", "NPI")
+    #File.makeTable("Provider_Name", "NPI")
+    # File.makeTable("Taxonomy_Table", "NPI")
+    # File.makeTable("Other_Provider_Name", "NPI")
+    # File.makeTable("Address_Information", "NPI")
+    # File.makeTable("Healthcare_Provider_Taxonomy_Group", "NPI")
+    # File.makeTable("Enumeration_Deactivation_Reactivation_Dates", "NPI")
+    # File.makeTable("Parent_Organizations", "NPI")
+    # File.makeTable("Official_Name_And_Sex", "NPI")
+    File.makeTable("Taxonomy_Codes")
     File.makeNPIColNames()
     
 

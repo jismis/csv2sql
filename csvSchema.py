@@ -103,7 +103,7 @@ class sqlTable:
         fieldnames_query_entry = []
         questionMarks = []
         values = []
-    
+        print(record)
         #if _id exists as field in record then consider it primary key
 
         if "_id" in record:
@@ -132,8 +132,6 @@ class sqlTable:
     
                 query = f'''INSERT INTO {table_name} ({fieldnames_string}) VALUES ({valueQuestionMarks})'''
         
-            print(query)
-            print(values)
 
             self.execute_query(query, values)
             
@@ -170,8 +168,6 @@ class sqlTable:
     
                 query = f'''INSERT INTO {table_name} ({fieldnames_string}) VALUES ({valueQuestionMarks})'''
 
-            print(query)
-            print(values)
             self.execute_query(query, values)
             
             return True
@@ -240,14 +236,15 @@ class TableFactory:
             print(value_type)
             query = f'''ALTER TABLE {table_name} ADD COLUMN {sql_column_name} {value_type}'''
             table.execute_query(query)
-    
+
+    #NEED TO FIND A WAY TO CHANGE THIS FOR MAKING A TABLE BASED ON WHAT TYPE OF DOC IT IS
     def make_table(self, table_name, parent_table=""):
 
         if parent_table:
             query = f'''CREATE TABLE IF NOT EXISTS {table_name} (_id TEXT PRIMARY KEY, NPI INTEGER NOT NULL, 
             FOREIGN KEY (NPI) REFERENCES {parent_table}(NPI))'''
         else:
-            query = f'''CREATE TABLE IF NOT EXISTS {table_name} (NPI INTEGER PRIMARY KEY)'''
+            query = f'''CREATE TABLE IF NOT EXISTS {table_name} (_id INTEGER PRIMARY KEY AUTOINCREMENT)'''
 
         table = sqlTable(table_name, parent_table)
 
