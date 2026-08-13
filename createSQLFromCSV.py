@@ -97,6 +97,8 @@ class manageFile:
         for field, entry in record.items():
             print(f'''field {field}, entry {entry}''')
             updated_record = {}
+            if field == "_id":
+                continue
             for item in entry:
                 updated_record['_id'] = rowID
                 updated_record[field] = item[0]
