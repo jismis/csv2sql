@@ -103,7 +103,7 @@ class sqlTable:
         fieldnames_query_entry = []
         questionMarks = []
         values = []
-        print(record)
+        #print(record)
         #if _id exists as field in record then consider it primary key
 
         if "_id" in record:
@@ -261,6 +261,19 @@ class TableFactory:
     def commit(self, table_name):
         table = self.getTable(table_name)
         return table.commit()
+
+    def update_records_bulk(self, table_name, records):
+        """Inserts/updates a batch of records in a single database transaction."""
+        if not records:
+            return
+        
+        # Example using SQLite parameterized batch insert:
+        cursor = self.connection.cursor()
+        columns = records[0].keys()
+        query = f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({','.join(['?']*len(columns))})"
+        
+        data = [tuple(rec[col] for col in columns) for rec in records]
+        cursor.executemany(query, data)
     
 
     

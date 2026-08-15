@@ -16,9 +16,9 @@ class npiFileHelper:
                               "Provider_Name_Suffix_Text", "Provider_Credential_Text", "Provider_Other_Organization_Name",
                               "Provider_Other_Organization_Name_Type_Code", "Provider_Other_Last_Name", 
                               "Provider_Other_First_Name", "Provider_Other_Middle_Name", "Provider_Other_Name_Prefix_Text",
-                              "Provider_Other_Name_Suffix_Text", "Provider_Other_Credential_Text"]
+                              "Provider_Other_Name_Suffix_Text", "Provider_Other_Credential_Text", "Provider_Other_Last_Name_Type_Code"]
         self.taxonomy_table = ["Healthcare_Provider_Taxonomy_Code", "Provider_License_Number", "Provider_License_Number_State_Code", "Healthcare_Provider_Primary_Taxonomy_Switch"]
-        self.other_provider_table = ["Other_Provider_Identifier", "Other_Provider_Identifier_State", "Other_Provider_Identifier_Issuer"]
+        self.other_provider_table = ["Other_Provider_Identifier", "Other_Provider_Identifier_State", "Other_Provider_Identifier_Issuer", "Other_Provider_Identifier_Type_Code" ]
         self.healthcare_provider_taxonomy_table = ["Healthcare_Provider_Taxonomy_Group"]
         self.address_table = ["Provider_First_Line_Business_Mailing_Address", "Provider_Second_Line_Business_Mailing_Address",
                               "Provider_Business_Mailing_Address_City_Name", "Provider_Business_Mailing_Address_State_Name",
@@ -40,7 +40,9 @@ class npiFileHelper:
                        self.enumeration_deactivation_reactivation_table, self.parentorg,
                        self.sex_name_official_table]
 
+#1 or 2 represents if the number at the end needs to be dealt with when making column names/if there are multiple columns for a topic separated by _##
     def findNameFromArray(self, table_array):
+
         if table_array == self.npi_table:
             return "NPI_Table", 1
         if table_array == self.provider_table:
@@ -62,6 +64,7 @@ class npiFileHelper:
         return "Error"
 
     def getTable(self, column):
+
         if column in self.npi_table:
             return "NPI_Table"
         if column in self.provider_table:
@@ -90,9 +93,9 @@ class npiFileHelper:
         
         for table in self.tables:
             if field in table:
-                print(f'''field is {field} in table {table}''')
+                #print(f'''field is {field} in table {table}''')
                 table_name, code = self.findNameFromArray(table)
-                print(f'''table name is {table_name}''')
+                #print(f'''table name is {table_name}''')
 
                 #print(f'''entry {entry}''')
                 #EDIT: need to return a list of tuples here instead of this. ******
